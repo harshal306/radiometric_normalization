@@ -26,7 +26,7 @@ def compute_score(kernel_filepath):
     
     return score
 
-def perform_data_process(image_path, ref_image_path=None, out_directory=None, out_path=None, deblur=False, product='TOA', source='PLANET', band_count=None):
+def perform_data_process(image_path, ref_image_path=None, out_directory=None, out_path=None, deblur=False, product='TOA', source='PLANET', band_count=None,ref_meta_image_path=None, candidate_meta_image_path=None):
     """
     Definition: Function to perform normalization and deblurring of image_path wrt referenced image
     image_path: Image to be processed
@@ -51,6 +51,9 @@ def perform_data_process(image_path, ref_image_path=None, out_directory=None, ou
     region = image_name.split('_')[0]
     candidate_path = image_path
     reference_path = None
+    ref_meta_path = None
+    candidate_meta_path = None
+
     try:
         if ref_image_path is not None:
             if os.path.exists(ref_image_path):
@@ -65,7 +68,7 @@ def perform_data_process(image_path, ref_image_path=None, out_directory=None, ou
                 raise Exception('Region reference file %s not present', (region_reference_file_path))
             if reference_path is None or not os.path.exists(reference_path): 
                 raise Exception('Reference image %s does not exists' % (reference_path))
-                
+
         logging.info('Selected %s as reference image', reference_path)
     except Exception as e:
         raise Exception("Reference image not set for the region %s and product %s" % (region, product))
@@ -73,6 +76,7 @@ def perform_data_process(image_path, ref_image_path=None, out_directory=None, ou
     
     reference_gimg = gimage.load(reference_path)
     candidate_gimg = gimage.load(candidate_path)
+
     if band_count is None:
         band_count = min(rasterio.open(reference_path).count, rasterio.open(candidate_path).count)
 
@@ -81,13 +85,29 @@ def perform_data_process(image_path, ref_image_path=None, out_directory=None, ou
         alpha_band = np.logical_not(reference_gimg.bands[band_num]==0)
         if alpha_band.any():
             alpha_c = np.logical_and(alpha_c, alpha_band)
+
     for band_num in range(band_count):
         alpha_band = np.logical_not(candidate_gimg.bands[band_num]==0)
         if alpha_band.any():
             alpha_c = np.logical_and(alpha_c, alpha_band)
 
+    if ref_meta_image_path is not None and os.path.exists(ref_meta_image_path):
+        ref_meta_path = ref_meta_image_path
+        ref_meta_path_gimg = gimage.load(ref_meta_path)
+
+        alpha_band = np.logical_not(ref_meta_path_gimg.bands[0]==1)
+        if alpha_band.any():
+            alpha_c = np.logical_and(alpha_c,alpha_band)
+
+    if candidate_meta_image_path is not None and os.path.exists(candidate_meta_image_path):
+        candidate_meta_path = candidate_meta_image_path
+        candidate_meta_path_gimg = gimage.load(candidate_meta_path)
+
+        alpha_band = alpha_band = np.logical_not(candidate_meta_path_gimg.bands[0]==0)
+        if alpha_band.any():
+            alpha_c = np.logical_and(alpha_c,alpha_band)
+
     temporary_gimg = gimage.GImage([candidate_gimg.bands[band_num] for band_num in range(band_count)], alpha_c, candidate_gimg.metadata)
-    
     candidate_path = os.path.join(temp_folder, 'candidate_'+image_name+extension)
     reference_path = os.path.join(temp_folder, 'reference_'+image_name+extension)
 
